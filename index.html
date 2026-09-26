@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LCD 1.8" Controller | ST7735S</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23050505'/%3E%3Crect x='25' y='22' width='50' height='56' rx='6' fill='none' stroke='%2310b981' stroke-width='5'/%3E%3Cpath d='M35 45h30M35 56h20' stroke='%2310b981' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" type="image/svg+xml">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background:
+                radial-gradient(ellipse at top, rgba(16,185,129,0.08), transparent 55%),
+                radial-gradient(ellipse at bottom right, rgba(251,191,36,0.05), transparent 50%),
+                #050505;
+            min-height: 100vh;
+            color: #fff;
+        }
+        .panel {
+            border-radius: 1rem;
+            background: rgba(24,24,27,0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn {
+            border-radius: 0.6rem;
+            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 0.55rem 0.9rem;
+            transition: all .18s ease-out;
+            border: 1px solid transparent;
+        }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-primary { background: #10b981; color: #04120c; }
+        .btn-primary:hover:not(:disabled) { background: #34d399; transform: translateY(-1px); }
+        .btn-zinc { background: rgba(255,255,255,0.08); color: #e5e7eb; border-color: rgba(255,255,255,0.12); }
+        .btn-zinc:hover:not(:disabled) { background: rgba(255,255,255,0.16); }
+        .btn-red { background: rgba(239,68,68,0.16); color: #fecaca; border-color: rgba(239,68,68,0.35); }
+        .btn-red:hover:not(:disabled) { background: rgba(239,68,68,0.3); }
+        input[type=text], textarea, input[type=number] {
+            width: 100%;
+            background: rgba(9,9,11,0.9);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 0.6rem;
+            padding: 0.6rem 0.75rem;
+            color: #fff;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        input[type=text]:focus, textarea:focus, input[type=number]:focus { border-color: rgba(16,185,129,0.6); }
+        input[type=color] {
+            width: 100%; height: 38px; border-radius: 0.6rem; background: rgba(9,9,11,0.9);
+            border: 1px solid rgba(255,255,255,0.12); cursor: pointer; padding: 2px;
+        }
+        .switch { position: relative; width: 52px; height: 28px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background: #3f3f46; border-radius: 999px; transition: .2s; }
+        .slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 4px; bottom: 4px; background: #fff; border-radius: 50%; transition: .2s; }
+        .switch input:checked + .slider { background: #10b981; }
+        .switch input:checked + .slider:before { transform: translateX(24px); }
+        .lcd-preview {
+            width: 128px; height: 160px; border-radius: 0.5rem; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.15);
+            display: block; background: #000; object-fit: contain;
+            image-rendering: pixelated;
+            box-shadow: inset 0 0 24px rgba(0,0,0,0.6);
+        }
+        .lcd-preview.broken { opacity: .35; }
+        .dropzone { border: 2px dashed rgba(255,255,255,0.18); border-radius: 0.8rem; transition: all .2s; }
+        .dropzone.drag { border-color: #10b981; background: rgba(16,185,129,0.08); }
+        .mode-active { border-color: rgba(16,185,129,0.6) !important; box-shadow: 0 0 0 1px rgba(16,185,129,0.4); }
+        .rotation-active {
+            border-color: rgba(16,185,129,0.85) !important;
+            background: rgba(16,185,129,0.18) !important;
+            color: #6ee7b7 !important;
+            box-shadow: 0 0 0 1px rgba(16,185,129,0.45);
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="min-h-screen flex flex-col items-center py-8 px-4 md:px-8">
+        <!-- Header -->
+        <header class="w-full max-w-5xl mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <a href="/" class="text-xs text-gray-500 hover:text-emerald-400 transition" data-i18n="backToHub">&larr; Powrót do huba</a>
+                    <h1 class="text-2xl md:text-3xl font-bold tracking-tight mt-2" data-i18n-html="title">
+                        LCD <span class="text-emerald-400">1.8"</span> Controller
+                    </h1>
+                    <p class="text-gray-400 text-sm mt-1" data-i18n="subtitle">Waveshare ST7735S &middot; 128&times;160 &middot; Raspberry Pi 4B</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div id="statusBadge" class="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/5 border border-white/10 text-xs">
+                        <span id="statusDot" class="h-2.5 w-2.5 rounded-full bg-gray-500"></span>
+                        <span id="statusText" class="text-gray-300" data-i18n="statusConnecting">laczenie...</span>
+                    </div>
+                    <!-- LANGUAGE SWITCHER (TOP-RIGHT) -->
+                    <div class="flex items-center bg-gray-900/90 backdrop-blur-md border border-gray-800 rounded-full p-1 shadow-2xl shrink-0">
+                        <button id="langBtnPL" onclick="setLanguage('pl')"
+                                class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 bg-purple-600 text-white shadow-sm">
+                            <span>🇵🇱</span>
+                            <span>PL</span>
+                        </button>
+                        <button id="langBtnEN" onclick="setLanguage('en')"
+                                class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 text-gray-400 hover:text-white">
+                            <span>🇬🇧</span>
+                            <span>EN</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <!-- Quick controls -->
+            <section class="panel p-5">
+                <h2 class="text-sm font-bold mb-4 flex items-center gap-2">
+                    <span class="text-emerald-400">&#9679;</span> <span data-i18n="quickControls">Szybkie sterowanie</span>
+                </h2>
+                <div class="flex items-center justify-between py-2">
+                    <div>
+                        <p class="text-sm font-semibold" data-i18n="backlightToggle">Podswietlenie ekranu</p>
+                        <p class="text-xs text-gray-500">GPIO 18 ON / OFF</p>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="blToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <button id="btnClear" class="btn btn-red" data-i18n="btnClear">Wyczysc ekran</button>
+                    <button id="btnIdle" class="btn btn-zinc" data-i18n="btnIdle">Ekran startowy</button>
+                </div>
+                <!-- DEMO AUTOPLAY BUTTON -->
+                <button id="btnDemo" onclick="activateDemoMode()"
+                        class="w-full mt-3 relative overflow-hidden group flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:brightness-110 active:scale-[0.98] transition rounded-xl font-bold text-white shadow-lg shadow-purple-500/25">
+                    <span class="flex items-center gap-2">
+                        <svg class="w-5 h-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span data-i18n="btnDemo">TRYB DEMO (AUTOPLAY)</span>
+                    </span>
+                    <span class="text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full bg-white/20 font-mono">LOOP</span>
+                </button>
+                <!-- CMATRIX SCREENSAVER BUTTON -->
+                <button id="btnCMatrix" onclick="activateCMatrixMode()"
+                        class="w-full mt-3 flex items-center justify-between px-4 py-2.5 bg-black/80 hover:bg-emerald-950/60 border border-emerald-500/40 hover:border-emerald-400 active:scale-[0.98] transition rounded-xl text-emerald-400 font-mono text-xs font-bold shadow-lg shadow-emerald-900/20">
+                    <span class="flex items-center gap-2">
+                        <span class="text-emerald-500 animate-pulse font-bold">$&gt;</span>
+                        CMATRIX SCREENSAVER
+                    </span>
+                    <span class="text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">LIVE</span>
+                </button>
+                <div class="mt-4">
+                    <p class="text-xs text-gray-400 mb-2" data-i18n="rotation">Obr&oacute;t ekranu</p>
+                    <div id="rotationGroup" class="grid grid-cols-4 gap-2">
+                        <button class="rot-btn btn btn-zinc" data-rotation="0">0&deg;</button>
+                        <button class="rot-btn btn btn-zinc" data-rotation="90">90&deg;</button>
+                        <button class="rot-btn btn btn-zinc" data-rotation="180">180&deg;</button>
+                        <button class="rot-btn btn btn-zinc" data-rotation="270">270&deg;</button>
+                    </div>
+                </div>
+                <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-black/30 rounded-lg py-2">
+                        <p class="text-[0.65rem] text-gray-500 uppercase" data-i18n="statMode">Tryb</p>
+                        <p id="statMode" class="text-sm font-semibold text-emerald-300">-</p>
+                    </div>
+                    <div class="bg-black/30 rounded-lg py-2">
+                        <p class="text-[0.65rem] text-gray-500 uppercase" data-i18n="statUptime">Uptime</p>
+                        <p id="statUptime" class="text-sm font-semibold">-</p>
+                    </div>
+                    <div class="bg-black/30 rounded-lg py-2">
+                        <p class="text-[0.65rem] text-gray-500 uppercase" data-i18n="statRes">Rozdz.</p>
+                        <p class="text-sm font-semibold">128x160</p>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-800/80 flex flex-col gap-2">
+                    <div class="flex justify-between items-center text-xs text-gray-400">
+                        <span class="flex items-center gap-1.5 font-medium">
+                            <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            <span data-i18n="backlight">Jasność podświetlenia</span>
+                        </span>
+                        <span id="brightnessVal" class="font-mono text-emerald-400 font-semibold">100%</span>
+                    </div>
+                    <input type="range" id="brightnessSlider" min="0" max="100" value="100" 
+                           class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
+                           oninput="document.getElementById('brightnessVal').innerText = this.value + '%'"
+                           onchange="fetch('/lcd-api/brightness', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({value: parseInt(this.value)})})" />
+                </div>
+            </section>
+
+            <!-- Live modes -->
+            <section class="panel p-5">
+                <h2 class="text-sm font-bold mb-4 flex items-center gap-2">
+                    <span class="text-emerald-400">&#9679;</span> <span data-i18n="liveModes">Tryby live</span>
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button id="btnStats" class="panel p-4 text-left hover:border-emerald-400/50 transition">
+                        <p class="text-sm font-bold" data-i18n="statsTitle">Zegar i statystyki CPU</p>
+                        <p class="text-xs text-gray-400 mt-1" data-i18n="statsDesc">Czas, IP, temperatura CPU i RAM.</p>
+                    </button>
+                    <button id="btnWeather" class="panel p-4 text-left hover:border-emerald-400/50 transition">
+                        <p class="text-sm font-bold" data-i18n="weatherTitle">Pogoda (Kraczkowa)</p>
+                        <p class="text-xs text-gray-400 mt-1" data-i18n="weatherDesc">Open-Meteo: temp., ikona, wilg.</p>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-4" data-i18n="modesNote">Tryby dzialaja w petli na ekranie do momentu wyslania nowej tresci lub zatrzymania.</p>
+            </section>
+
+            <!-- RETRO GIF PRESETS GALLERY -->
+            <div class="lg:col-span-2 bg-gray-900/70 backdrop-blur-md rounded-2xl border border-gray-800 p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-pink-400">&#10024;</span>
+                        <h3 class="text-sm font-semibold text-gray-200" data-i18n="gifGalleryTitle">Biblioteka Animacji Retro (1-Click)</h3>
+                    </div>
+                    <span class="text-[11px] text-gray-500 font-mono" data-i18n="gifGallerySub">128x160 PIXEL ART</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <!-- Mario Card -->
+                    <div class="flex flex-col items-center bg-gray-950/60 border border-gray-800 hover:border-pink-500/50 transition rounded-xl p-3 gap-2">
+                        <div class="w-24 h-28 bg-black/60 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800">
+                            <img src="/lcd-api/gifs/mario.gif" alt="Mario" class="h-full w-auto object-contain [image-rendering:pixelated]" />
+                        </div>
+                        <span class="text-xs font-semibold text-gray-200" data-i18n="marioTitle">Super Mario</span>
+                        <button onclick="playPreset('mario')" class="w-full py-1.5 bg-gray-800 hover:bg-pink-600 active:scale-95 text-xs text-white font-medium rounded-lg transition" data-i18n="btnPlayGif">
+                            Wyswietl
+                        </button>
+                    </div>
+                    <!-- Coin Card -->
+                    <div class="flex flex-col items-center bg-gray-950/60 border border-gray-800 hover:border-yellow-500/50 transition rounded-xl p-3 gap-2">
+                        <div class="w-24 h-28 bg-black/60 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800">
+                            <img src="/lcd-api/gifs/coin.gif" alt="Coin" class="h-full w-auto object-contain [image-rendering:pixelated]" />
+                        </div>
+                        <span class="text-xs font-semibold text-gray-200" data-i18n="coinTitle">Zlota Moneta</span>
+                        <button onclick="playPreset('coin')" class="w-full py-1.5 bg-gray-800 hover:bg-yellow-600 active:scale-95 text-xs text-white font-medium rounded-lg transition" data-i18n="btnPlayGif">
+                            Wyswietl
+                        </button>
+                    </div>
+                    <!-- Matrix Card -->
+                    <div class="flex flex-col items-center bg-gray-950/60 border border-gray-800 hover:border-emerald-500/50 transition rounded-xl p-3 gap-2">
+                        <div class="w-24 h-28 bg-black/60 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800">
+                            <img src="/lcd-api/gifs/matrix.gif" alt="Matrix" class="h-full w-auto object-contain [image-rendering:pixelated]" />
+                        </div>
+                        <span class="text-xs font-semibold text-gray-200" data-i18n="matrixTitle">Matrix Rain</span>
+                        <button onclick="playPreset('matrix')" class="w-full py-1.5 bg-gray-800 hover:bg-emerald-600 active:scale-95 text-xs text-white font-medium rounded-lg transition" data-i18n="btnPlayGif">
+                            Wyswietl
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Text display -->
+            <section class="panel p-5 lg:col-span-2">
+                <h2 class="text-sm font-bold mb-4 flex items-center gap-2">
+                    <span class="text-emerald-400">&#9679;</span> <span data-i18n="textTitle">Wyslij tekst</span>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-5">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block" data-i18n="labelContent">Tresc</label>
+                            <textarea id="txtInput" rows="3" placeholder="Np. DZIALA!" data-i18n="customTextPlaceholder">DZIALA!</textarea>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block" data-i18n="labelFontSize">Rozmiar czcionki</label>
+                                <input type="number" id="txtSize" min="0" max="60" value="0" placeholder="0 = auto">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block" data-i18n="labelTextColor">Kolor tekstu</label>
+                                <input type="color" id="txtColor" value="#ffffff">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block" data-i18n="labelBg">Tlo</label>
+                                <input type="color" id="bgColor" value="#000000">
+                            </div>
+                        </div>
+                        <button id="btnSendText" class="btn btn-primary w-full sm:w-auto px-6" data-i18n="btnSendText">Wyslij na ekran</button>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400 font-medium" data-i18n="livePreview">Podgląd na żywo (Live)</span>
+                            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        </div>
+                        <div class="relative p-2 bg-black/60 rounded-xl border border-gray-800 shadow-inner flex items-center justify-center min-w-[140px] min-h-[170px]">
+                            <img id="lcdLivePreview" 
+                                 src="/lcd-api/preview.png" 
+                                 alt="Podgląd LCD" 
+                                 class="rounded border border-gray-700 object-contain shadow-lg max-h-[160px] max-w-[160px] transition-transform duration-200" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Upload -->
+            <section class="panel p-5 lg:col-span-2">
+                <h2 class="text-sm font-bold mb-4 flex items-center gap-2">
+                    <span class="text-emerald-400">&#9679;</span> Obraz / GIF
+                </h2>
+                <div id="dropzone" class="dropzone p-6 text-center cursor-pointer">
+                    <input type="file" id="fileInput" class="hidden" accept="image/png,image/jpeg,image/gif">
+                    <p class="text-sm font-semibold">Przeciagnij plik tutaj lub kliknij, aby wybrac</p>
+                    <p class="text-xs text-gray-500 mt-1">PNG, JPG, animowany GIF &middot; skalowane automatycznie do 128x160</p>
+                    <p id="fileName" class="text-xs text-emerald-300 mt-3"></p>
+                </div>
+                <div class="flex items-center gap-3 mt-4">
+                    <button id="btnUpload" class="btn btn-primary px-6" disabled>Wyslij plik na ekran</button>
+                    <span id="uploadStatus" class="text-xs text-gray-400"></span>
+                </div>
+            </section>
+        </main>
+
+        <footer class="mt-8 text-gray-600 text-xs">© 2026 djmcg.toadres.pl &middot; LCD Control</footer>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 hidden z-50">
+        <div id="toastInner" class="px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border"></div>
+    </div>
+
+    <script>
+        const API = '/lcd-api';
+        const $ = (id) => document.getElementById(id);
+
+        function toast(message, kind = 'ok') {
+            const wrap = $('toast'), inner = $('toastInner');
+            const colors = {
+                ok: 'bg-emerald-500/20 border-emerald-400/40 text-emerald-100',
+                err: 'bg-red-500/20 border-red-400/40 text-red-100',
+                info: 'bg-white/10 border-white/20 text-gray-100'
+            };
+            inner.className = 'px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border ' + (colors[kind] || colors.info);
+            inner.textContent = message;
+            wrap.classList.remove('hidden');
+            clearTimeout(toast._t);
+            toast._t = setTimeout(() => wrap.classList.add('hidden'), 3200);
+        }
+
+        async function call(path, opts = {}) {
+            try {
+                const res = await fetch(API + path, opts);
+                let data = {};
+                try { data = await res.json(); } catch (e) {}
+                if (!res.ok || data.ok === false) {
+                    throw new Error(data.error || ('HTTP ' + res.status));
+                }
+                return data;
+            } catch (err) {
+                toast(err.message || 'Blad polaczenia', 'err');
+                throw err;
+            }
+        }
+
+        function setBusy(btn, busy, label) {
+            if (!btn) return;
+            if (busy) {
+                btn.dataset.label = btn.dataset.label || btn.textContent;
+                btn.disabled = true;
+                if (label) btn.textContent = label;
+            } else {
+                btn.disabled = false;
+                if (btn.dataset.label) btn.textContent = btn.dataset.label;
+            }
+        }
+
+        // ---- live hardware preview (mirror of the physical panel) ----
+        const livePreview = $('lcdLivePreview');
+        function refreshPreview() {
+            livePreview.src = API + '/preview.png?t=' + Date.now();
+        }
+        livePreview.addEventListener('load', () => livePreview.classList.remove('broken'));
+        livePreview.addEventListener('error', () => livePreview.classList.add('broken'));
+        refreshPreview();
+        setInterval(refreshPreview, 2000);
+
+        // ---- quick controls ----
+        $('blToggle').addEventListener('change', async (e) => {
+            const on = e.target.checked;
+            try {
+                await call('/backlight', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ on })
+                });
+                toast(on ? 'Podswietlenie ON' : 'Podswietlenie OFF', 'info');
+            } catch (err) {
+                e.target.checked = !on;
+            }
+        });
+
+        $('btnClear').addEventListener('click', async () => {
+            await call('/clear', { method: 'POST' });
+            toast('Ekran wyczyszczony');
+        });
+
+        $('btnIdle').addEventListener('click', async () => {
+            await call('/stop', { method: 'POST' });
+            toast('Ekran startowy', 'info');
+        });
+
+        // ---- rotation ----
+        const rotationButtons = Array.from(document.querySelectorAll('.rot-btn'));
+
+        function updateRotationButtons(rotation) {
+            rotationButtons.forEach((btn) => {
+                const active = Number(btn.dataset.rotation) === Number(rotation);
+                btn.classList.toggle('rotation-active', active);
+            });
+        }
+
+        rotationButtons.forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const rotation = Number(btn.dataset.rotation);
+                setBusy(btn, true);
+                try {
+                    const data = await call('/rotate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rotation })
+                    });
+                    updateRotationButtons(data.rotation);
+                    toast('Obr\u00f3t ekranu: ' + data.rotation + '\u00b0', 'info');
+                } catch (err) {
+                    // toast already shown by call()
+                } finally {
+                    setBusy(btn, false);
+                }
+            });
+        });
+
+        // ---- text ----
+        $('btnSendText').addEventListener('click', async () => {
+            const btn = $('btnSendText');
+            setBusy(btn, true, 'Wysylanie...');
+            try {
+                await call('/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: $('txtInput').value,
+                        font_size: parseInt($('txtSize').value || '0', 10),
+                        text_color: $('txtColor').value,
+                        bg_color: $('bgColor').value
+                    })
+                });
+                toast('Tekst wyslany na ekran');
+            } finally {
+                setBusy(btn, false);
+            }
+        });
+
+        // ---- upload ----
+        const dropzone = $('dropzone');
+        const fileInput = $('fileInput');
+        let selectedFile = null;
+
+        function pickFile(file) {
+            if (!file) return;
+            selectedFile = file;
+            $('fileName').textContent = file.name + '  (' + Math.round(file.size / 1024) + ' kB)';
+            $('btnUpload').disabled = false;
+            $('uploadStatus').textContent = '';
+        }
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => pickFile(e.target.files[0]));
+        ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); dropzone.classList.add('drag');
+        }));
+        ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); dropzone.classList.remove('drag');
+        }));
+        dropzone.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files.length) pickFile(e.dataTransfer.files[0]);
+        });
+
+        $('btnUpload').addEventListener('click', async () => {
+            if (!selectedFile) return;
+            const btn = $('btnUpload');
+            setBusy(btn, true, 'Wysylanie...');
+            $('uploadStatus').textContent = 'Przetwarzanie...';
+            try {
+                const form = new FormData();
+                form.append('file', selectedFile);
+                const data = await call('/upload', { method: 'POST', body: form });
+                $('uploadStatus').textContent = 'Wyslano (' + (data.frames || 1) + ' klatek)';
+                toast('Plik wyslany na ekran');
+            } catch (err) {
+                $('uploadStatus').textContent = '';
+            } finally {
+                setBusy(btn, false);
+            }
+        });
+
+        // ---- live modes ----
+        $('btnStats').addEventListener('click', async () => {
+            await call('/mode/stats', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interval: 5 })
+            });
+            toast('Tryb: zegar i statystyki CPU', 'info');
+        });
+
+        $('btnWeather').addEventListener('click', async () => {
+            await call('/mode/weather', { method: 'POST' });
+            toast('Tryb: pogoda Kraczkowa', 'info');
+        });
+
+        // ---- DEMO (autoplay) + retro GIF presets ----
+        async function activateDemoMode() {
+            try {
+                await call('/mode/demo', { method: 'POST' });
+                toast('Tryb DEMO (autoplay) uruchomiony', 'info');
+            } catch (err) {
+                // toast already shown by call()
+            }
+        }
+
+        async function activateCMatrixMode() {
+            try {
+                await call('/mode/cmatrix', { method: 'POST' });
+                toast('Wygaszacz CMatrix aktywny!', 'info');
+            } catch (err) {
+                // toast already shown by call()
+            }
+        }
+
+        async function playPreset(name) {
+            try {
+                await call('/play-preset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                toast('Odtwarzanie: ' + name, 'info');
+            } catch (err) {
+                // toast already shown by call()
+            }
+        }
+
+        // ---- status polling ----
+        async function refreshStatus() {
+            try {
+                const res = await fetch(API + '/status', { cache: 'no-store' });
+                const s = await res.json();
+                const ok = res.ok && s.ok !== false;
+                $('statusDot').className = 'h-2.5 w-2.5 rounded-full ' + (ok ? 'bg-emerald-400' : 'bg-red-500');
+                $('statusText').textContent = ok ? ('online · ' + (s.mode || '-')) : 'serwis offline';
+                $('statMode').textContent = s.mode || '-';
+                $('statUptime').textContent = s.uptime != null ? Math.round(s.uptime) + ' s' : '-';
+                if (typeof s.backlight === 'boolean') $('blToggle').checked = s.backlight;
+                if (typeof s.brightness === 'number') {
+                    const bs = $('brightnessSlider');
+                    if (bs && !bs.matches(':active')) bs.value = s.brightness;
+                    const bv = $('brightnessVal');
+                    if (bv) bv.innerText = s.brightness + '%';
+                }
+                if (typeof s.rotation === 'number') updateRotationButtons(s.rotation);
+                $('btnStats').classList.toggle('mode-active', s.mode === 'stats');
+                $('btnWeather').classList.toggle('mode-active', s.mode === 'weather');
+                const demoBtn = $('btnDemo');
+                if (demoBtn) demoBtn.classList.toggle('mode-active', s.mode === 'demo');
+                const cmatrixBtn = $('btnCMatrix');
+                if (cmatrixBtn) cmatrixBtn.classList.toggle('mode-active', s.mode === 'cmatrix');
+            } catch (err) {
+                $('statusDot').className = 'h-2.5 w-2.5 rounded-full bg-red-500';
+                $('statusText').textContent = 'brak polaczenia';
+                $('statMode').textContent = '-';
+            }
+        }
+        refreshStatus();
+        setInterval(refreshStatus, 3000);
+    
+
+// --- SILNIK TŁUMACZEŃ (i18n) ---
+const i18n = {
+    pl: {
+        backToHub: "← Powrót do menu",
+        title: 'Panel Sterowania <span class="text-emerald-400">LCD 1.8"</span>',
+        subtitle: "Sterownik ST7735S SPI • Raspberry Pi 4B",
+        statusConnecting: "Łączenie...",
+        statusReady: "Gotowy",
+        quickControls: "Szybkie sterowanie",
+        btnDemo: "TRYB DEMO (AUTOPLAY)",
+        btnCmatrix: "CMATRIX WYGASZACZ",
+        btnStats: "Zegar i Statystyki",
+        btnWeather: "Pogoda (Kraczkowa)",
+        btnClear: "Wyczyść ekran",
+        btnIdle: "Wstrzymaj",
+        backlightToggle: "Włącz / Wyłącz ekran",
+        backlight: "Jasność podświetlenia",
+        rotation: "Obrót panelu",
+        statMode: "Tryb",
+        statUptime: "Uptime",
+        statRes: "Rozdzielczość",
+        liveModes: "Tryby pracy na żywo",
+        statsTitle: "Monitor Systemu",
+        statsDesc: "Zegar, obciążenie CPU, RAM i temperatura RPi",
+        weatherTitle: "Stacja Pogodowa",
+        weatherDesc: "Aktualna pogoda i prognoza dla Kraczkowej",
+        modesNote: "Wybrany tryb działa w tle i odświeża ekran w czasie rzeczywistym.",
+        gifGalleryTitle: "Biblioteka Animacji Retro (1-Click)",
+        gifGallerySub: "128x160 PIXEL ART",
+        marioTitle: "Super Mario",
+        coinTitle: "Złota Moneta",
+        matrixTitle: "Matrix Rain",
+        btnPlayGif: "Wyświetl",
+        textTitle: "Własny tekst",
+        labelContent: "Treść wiadomości",
+        customTextPlaceholder: "Wpisz tekst do wyświetlenia na ekranie...",
+        labelFontSize: "Rozmiar czcionki",
+        labelTextColor: "Kolor tekstu",
+        labelBg: "Kolor tła",
+        btnSendText: "Wyświetl tekst",
+        uploadTitle: "Obraz / GIF",
+        dropzoneTitle: "Upuść plik tutaj lub kliknij, aby wybrać",
+        dropzoneSub: "Obsługiwane formaty: PNG, JPG, GIF (128x160)",
+        btnUpload: "Wyślij na ekran",
+        livePreview: "Podgląd na żywo (Live)"
+    },
+    en: {
+        backToHub: "← Back to Hub",
+        title: '<span class="text-emerald-400">1.8" LCD</span> Control Panel',
+        subtitle: "ST7735S SPI Driver • Raspberry Pi 4B",
+        statusConnecting: "Connecting...",
+        statusReady: "Ready",
+        quickControls: "Quick Controls",
+        btnDemo: "DEMO MODE (AUTOPLAY)",
+        btnCmatrix: "CMATRIX SCREENSAVER",
+        btnStats: "Clock & Hardware Stats",
+        btnWeather: "Weather (Kraczkowa)",
+        btnClear: "Clear Screen",
+        btnIdle: "Pause",
+        backlightToggle: "Toggle Backlight",
+        backlight: "Backlight Brightness",
+        rotation: "Panel Rotation",
+        statMode: "Mode",
+        statUptime: "Uptime",
+        statRes: "Resolution",
+        liveModes: "Live Operating Modes",
+        statsTitle: "System Monitor",
+        statsDesc: "Clock, CPU usage, RAM, and RPi temperature",
+        weatherTitle: "Weather Station",
+        weatherDesc: "Current weather & forecast for Kraczkowa",
+        modesNote: "Selected mode runs continuously in the background.",
+        gifGalleryTitle: "Retro Animation Library (1-Click)",
+        gifGallerySub: "128x160 PIXEL ART",
+        marioTitle: "Super Mario",
+        coinTitle: "Golden Coin",
+        matrixTitle: "Matrix Rain",
+        btnPlayGif: "Play",
+        textTitle: "Custom Text",
+        labelContent: "Message Content",
+        customTextPlaceholder: "Enter text to display on screen...",
+        labelFontSize: "Font Size",
+        labelTextColor: "Text Color",
+        labelBg: "Background Color",
+        btnSendText: "Display Text",
+        uploadTitle: "Image / GIF",
+        dropzoneTitle: "Drop file here or click to browse",
+        dropzoneSub: "Supported formats: PNG, JPG, GIF (128x160)",
+        btnUpload: "Upload to Screen",
+        livePreview: "Live Mirrored Preview"
+    }
+};
+
+window.currentLang = localStorage.getItem('lcd_lang') || 'pl';
+
+window.t = function(key) {
+    const dict = i18n[window.currentLang] || i18n.pl;
+    return dict[key] || key;
+};
+
+window.setLanguage = function(lang) {
+    window.currentLang = lang;
+    localStorage.setItem('lcd_lang', lang);
+
+    const btnPL = document.getElementById('langBtnPL');
+    const btnEN = document.getElementById('langBtnEN');
+    if (btnPL && btnEN) {
+        if (lang === 'pl') {
+            btnPL.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 bg-purple-600 text-white shadow-sm";
+            btnEN.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 text-gray-400 hover:text-white";
+        } else {
+            btnEN.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 bg-purple-600 text-white shadow-sm";
+            btnPL.className = "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200 text-gray-400 hover:text-white";
+        }
+    }
+
+    const dict = i18n[lang] || i18n.pl;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) {
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                el.placeholder = dict[key];
+            } else {
+                el.innerText = dict[key];
+            }
+        }
+    });
+
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        const key = el.getAttribute('data-i18n-html');
+        if (dict[key]) el.innerHTML = dict[key];
+    });
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => window.setLanguage(window.currentLang));
+} else {
+    window.setLanguage(window.currentLang);
+}
+</script>
+</body>
+</html>

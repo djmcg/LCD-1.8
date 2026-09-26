@@ -1,0 +1,10 @@
+venv/
+.venv/
+__pycache__/
+*.log
+*.pid
+nohup.out
+play_loop.log
+test_loop.gif
+.lgd-nfy0
+.env

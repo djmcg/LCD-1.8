@@ -1,3 +1,3 @@
 #!/bin/bash
-cd "/home/admin/raspberry-site/www/LCD 1.8"
+cd "$(dirname "$(readlink -f "$0")")"
 exec ./venv/bin/python display_service.py

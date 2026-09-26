@@ -11,7 +11,7 @@ Combines low-level hardware SPI acceleration with a modern asynchronous web inte
 > **Watch the live demonstration below:**
 ## 📺 Demo Video
 
-https://github.com/user-attachments/assets/TUTAJ_WKLEJ_SKOPIOWANY_LINK.mp4
+https://github.com/user-attachments/assets/b822d57a-ec9b-4404-8742-990838186b51
 
 ---
 

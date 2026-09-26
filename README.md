@@ -9,8 +9,9 @@ Combines low-level hardware SPI acceleration with a modern asynchronous web inte
 ## 📺 Demo Video
 
 > **Watch the live demonstration below:**
->
-https://github.com/djmcg/rpi-st7735s-lcd-hub/issues/1#issue-5594425085
+## 📺 Demo Video
+
+https://github.com/user-attachments/assets/TUTAJ_WKLEJ_SKOPIOWANY_LINK.mp4
 
 ---
 
